@@ -1078,7 +1078,7 @@ async function runNearby() {
     $("nbNote").textContent = res.failed.length ? `有 ${res.failed.length} 个词没查成（${res.failed.join("、")}），可能是天地图暂时限流，稍后可以再查一次。` : "";
   } catch (e) {
     $("nbNote").textContent = "没查成：" + (e.message || e) + "。可能是网络或天地图暂时限流，稍后再试。";
-  } finally { nbBusy = false; nbSync(); renderNearby(); drawMap(false); }
+  } finally { nbBusy = false; nbSync(); renderNearby(); drawMap(true); }
 }
 function nbCurrent() { const a = areas[cur]; return a && a.nearby; }
 function nbStale() { const r = nbCurrent(); return !!r && r.key !== ringsKey(state.rings); }
@@ -1159,9 +1159,9 @@ $("nbSeg").addEventListener("click", e => {
   const b = e.target.closest("button[data-r]"); if (!b) return;
   nbRadius = +b.dataset.r;
   $("nbSeg").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b));
-  renderNearby(); drawMap(false);
+  renderNearby(); drawMap(true);
 });
-$("nbOnMap").addEventListener("change", () => drawMap(false));
+$("nbOnMap").addEventListener("change", () => drawMap(true));
 $("btnNbCopy").onclick = async () => {
   const t = nbText();
   try { await navigator.clipboard.writeText(t); $("nbNote").textContent = "已复制，可以贴进报告或微信。"; }
@@ -1257,7 +1257,7 @@ function baseLabel() {
   return TIANDITU_KEY ? "© 天地图" : "Esri World Imagery";
 }
 function fitMap() {
-  const all = allAreas().flatMap(a => a.rings.flat()); if (!all.length) return;
+  const all = allAreas().flatMap(a => a.rings.flat()).concat(nbMarkers()); if (!all.length) return;   // 周边地点也框进来
   map.w = map.el.clientWidth; map.h = map.el.clientHeight;
   const lats = all.map(p => p.lat), lons = all.map(p => p.lon);
   const nA = allAreas().length, reserve = nA > 1 ? 40 + 18 * nA : 70;   // 上面给说明牌（图例）留的高度
