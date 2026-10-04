@@ -131,6 +131,11 @@ body.mapfull { overflow: hidden; }
 #map .mapcard .lg { display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #map .mapcard .lg i { flex: none; width: 10px; height: 10px; border-radius: 2px; }
 #map .mapcard .lg .hatch { width: 10px; height: 10px; margin-right: 0; }
+/* 手机上长按保存图片的弹层 */
+.imgsheet { position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,.82); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 16px; gap: 12px; }
+.imgsheet img { max-width: 100%; max-height: 72vh; border-radius: 8px; background: #fff; }
+.imgsheet p { color: #fff; margin: 0; font-size: 15px; text-align: center; }
+.imgsheet button { background: #fff; color: #222; }
 /* 两期对比 */
 .cmpbox { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: var(--field); font-size: 14px; }
 .cmpbox select { width: auto; padding: 5px 8px; font-size: 13px; background: var(--card); }
@@ -284,6 +289,15 @@ footer { color: var(--faint); font-size: 12px; line-height: 1.7; margin-top: 18p
       <button id="btnCopy" disabled>复制经纬度</button>
     </div>
     <p class="hint" id="exportNote"></p>
+    <details id="dlHelp">
+      <summary>手机上下载不了？换个办法试试</summary>
+      <ol>
+        <li>先确认不是在<b>微信里</b>打开的：微信不让网页下载文件，要点右上角 ··· →「在浏览器打开」。</li>
+        <li>点这个：<button id="btnKml2" class="small" disabled>换一种方式下载</button>　有的手机会直接弹出「用奥维打开」或「下载」。</li>
+        <li>还不行，用手机上别的浏览器打开这个网页再下载，比如夸克、QQ 浏览器、Edge。</li>
+      </ol>
+      <p class="hint">哪种办法管用、哪种不管用，告诉做这个工具的人，好对症修改。</p>
+    </details>
     <details>
       <summary>怎么导进奥维</summary>
       <ol>
@@ -1148,7 +1162,10 @@ $("zloc").onclick = e => {
   e.stopPropagation();
   if (geo.watch != null) { locStop(""); return; }
   if (!navigator.geolocation) { $("locNote").textContent = "这个浏览器不支持定位。"; return; }
-  $("zloc").classList.add("on"); $("locNote").textContent = "正在定位……第一次会问你允不允许使用位置，请点「允许」。";
+  $("zloc").classList.add("on");
+  const t0 = Date.now();
+  const tick = () => { if (geo.watch != null && !geo.pos) { $("locNote").textContent = `正在定位……已等 ${Math.round((Date.now() - t0) / 1000)} 秒。第一次会问你允不允许使用位置，请点「允许」；在室内可能要半分钟，到窗边或室外会快很多。`; setTimeout(tick, 1000); } };
+  setTimeout(tick, 0);   // 等下面开始定位以后再走
   geo.watch = navigator.geolocation.watchPosition(p => {
     geo.pos = { lon: p.coords.longitude, lat: p.coords.latitude, acc: p.coords.accuracy || 0 };
     $("locNote").innerHTML = locText();
@@ -1371,7 +1388,7 @@ function currentKml() {
   return `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2">\n<Document>\n<name>${xmlEsc(kmlName())}</name>\n${styles}\n<Style id="pt"><IconStyle><scale>0.7</scale></IconStyle><LabelStyle><scale>0.9</scale></LabelStyle></Style>\n${folders}\n</Document>\n</kml>\n`;
 }
 function setExport(on) {
-  ["btnKml", "btnCopy", "btnShare", "btnPng", "btnPngShare"].forEach(id => $(id).disabled = !on);
+  ["btnKml", "btnKml2", "btnCopy", "btnShare", "btnPng", "btnPngShare"].forEach(id => $(id).disabled = !on);
   const n = allAreas().length;
   $("exportNote").textContent = on ? `文件名：${kmlName()}.kml` + (n > 1 ? `（${n} 个矿区都在里面，奥维里每个矿区一个文件夹）` : "") : "核对完坐标后可以导出";
 }
@@ -1403,8 +1420,16 @@ async function saveFile(blob, name) {
 }
 if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
 $("btnKml").onclick = async () => {
-  await saveFile(new Blob([currentKml()], { type: "application/vnd.google-earth.kml+xml" }), kmlName() + ".kml");
-  $("exportNote").textContent = `已经开始下载 ${kmlName()}.kml。手机上在通知栏或「文件管理 → 下载」里找到它，点开选奥维，再点「导入」。没反应的话，请确认不是在微信里打开的。`;
+  const how = await saveFile(new Blob([currentKml()], { type: "application/vnd.google-earth.kml+xml" }), kmlName() + ".kml");
+  $("exportNote").textContent = `已经交给浏览器下载 ${kmlName()}.kml（方式：${how === "sw" ? "中转" : "直接"}）。手机上在通知栏或「文件管理 → 下载」里找到它，点开选奥维，再点「导入」。没反应的话，看下面「手机上下载不了？」`;
+};
+// 办法二：把文件编成一个「data:」链接直接打开。有的手机浏览器会当成文件，弹出「用奥维打开」或「下载」
+$("btnKml2").onclick = () => {
+  const b64 = btoa(unescape(encodeURIComponent(currentKml())));
+  const url = "data:application/vnd.google-earth.kml+xml;charset=utf-8;base64," + b64;
+  const w = window.open(url, "_blank");
+  if (!w) location.href = url;
+  $("exportNote").textContent = "已经用第二种方式打开了文件。如果手机问「用什么打开」，选奥维；如果只显示了一堆文字，说明这个浏览器也不行，请换个浏览器。";
 };
 function kmlFile() { return new File([currentKml()], kmlName() + ".kml", { type: "application/vnd.google-earth.kml+xml" }); }
 // 「分享」按钮：只在浏览器说能分享文件时才显示（微信里不显示）。
@@ -1704,6 +1729,14 @@ async function renderMapImage() {
   shadow(false);
   return { cv, missing: jobs.length - tiles.length };
 }
+/** 弹出一张图，提示长按保存（几乎所有手机浏览器都支持长按存图） */
+function showImgSheet(blob) {
+  const box = document.createElement("div"); box.className = "imgsheet";
+  const url = URL.createObjectURL(blob);
+  box.innerHTML = `<p>长按图片 →「保存图片」，就存进相册了</p><img alt="卫星图" src="${url}"><button>关闭</button>`;
+  box.querySelector("button").onclick = () => { box.remove(); URL.revokeObjectURL(url); };
+  document.body.appendChild(box);
+}
 let pngCache = null;   // 分享要在点击后很快发起，所以第一次画好先存着，第二次点直接用
 function pngKey() { return [map.z, map.cx.toFixed(0), map.cy.toFixed(0), map.w, map.h, $("basemap").value, cur, nbRadius, nbMarkers().length, cmp.on, cmp.old, cmp.neu, geo.pos ? geo.pos.lon.toFixed(6) + geo.pos.lat.toFixed(6) : "", ...allAreas().map(a => a.name + a.areaM2)].join("|"); }
 async function getPng() {
@@ -1719,6 +1752,7 @@ $("btnPng").onclick = async () => {
   try {
     const { blob, missing } = await getPng();
     await saveFile(blob, pngName());
+    if (matchMedia("(pointer: coarse)").matches) showImgSheet(blob);   // 手机上：同时弹出图片，长按就能存进相册
     $("pngNote").textContent = `已保存：${pngName()}` + (missing ? `（有 ${missing} 块卫星图没加载出来，可以稍等再存一次）` : "") + "。手机上在「文件管理 → 下载」里，也可以直接截屏。";
   } catch (e) { $("pngNote").textContent = "图片没生成出来（" + (e.message || e) + "），可以直接截屏。"; }
 };
