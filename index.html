@@ -282,29 +282,20 @@ footer { color: var(--faint); font-size: 12px; line-height: 1.7; margin-top: 18p
 
   <section class="card">
     <h2><span class="step">6</span>需要时，导到奥维</h2>
-    <p class="hint" style="margin:-4px 0 10px">要去现场导航到拐点、跟别的图层叠着看、长期存着的时候，才需要导进奥维。只是看位置、发截图，上一步就够了。</p>
+    <p class="hint" style="margin:-4px 0 10px">要去现场导航到拐点、跟别的图层叠着看、长期存着的时候，才需要导进奥维。只是看位置、发截图，前面几步就够了。</p>
+    <p class="cmbox" style="margin:0 0 10px"><b>KML 文件请在电脑上下载。</b>手机浏览器大多下载不了网页生成的文件，下载好以后按下面的办法导进奥维。</p>
     <div class="btns">
       <button id="btnKml" class="primary" disabled>下载 KML 文件</button>
       <button id="btnShare" class="primary" style="display:none" disabled>分享给奥维 / 微信</button>
       <button id="btnCopy" disabled>复制经纬度</button>
     </div>
     <p class="hint" id="exportNote"></p>
-    <details id="dlHelp">
-      <summary>手机上下载不了？换个办法试试</summary>
-      <ol>
-        <li>先确认不是在<b>微信里</b>打开的：微信不让网页下载文件，要点右上角 ··· →「在浏览器打开」。</li>
-        <li>点这个：<button id="btnKml2" class="small" disabled>换一种方式下载</button>　有的手机会直接弹出「用奥维打开」或「下载」。</li>
-        <li>还不行，用手机上别的浏览器打开这个网页再下载，比如夸克、QQ 浏览器、Edge。</li>
-      </ol>
-      <p class="hint">哪种办法管用、哪种不管用，告诉做这个工具的人，好对症修改。</p>
-    </details>
-    <details>
+    <details open>
       <summary>怎么导进奥维</summary>
       <ol>
-        <li><b>安卓 / 华为手机</b>：下载后点通知栏里的文件 → 选「奥维互动地图」打开 → 按提示点「导入」；或在「文件管理」→ 下载 里找到它，点开选奥维。</li>
-        <li><b>苹果手机</b>：下载后在「文件」App 里找到它 → 共享 → 奥维。</li>
-        <li><b>电脑</b>：把文件拖进奥维窗口，或在奥维里「导入」。</li>
-        <li><b>发给别人</b>：把文件在微信里发过去，对方点开文件 → 右上角「用其他应用打开」→ 奥维。</li>
+        <li><b>在电脑上</b>打开这个网页，输入坐标后点「下载 KML 文件」，文件在电脑的「下载」文件夹里。</li>
+        <li><b>导进电脑上的奥维</b>：把文件拖进奥维窗口，或在奥维里点「导入」。奥维登录同一个账号，手机上也能看到。</li>
+        <li><b>或者发到手机上的奥维</b>：在电脑微信里把文件发给「文件传输助手」，手机上点开文件 → 右上角「用其他应用打开」→ 奥维 → 导入。发给别人也是这样。</li>
       </ol>
     </details>
   </section>
@@ -1388,7 +1379,7 @@ function currentKml() {
   return `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2">\n<Document>\n<name>${xmlEsc(kmlName())}</name>\n${styles}\n<Style id="pt"><IconStyle><scale>0.7</scale></IconStyle><LabelStyle><scale>0.9</scale></LabelStyle></Style>\n${folders}\n</Document>\n</kml>\n`;
 }
 function setExport(on) {
-  ["btnKml", "btnKml2", "btnCopy", "btnShare", "btnPng", "btnPngShare"].forEach(id => $(id).disabled = !on);
+  ["btnKml", "btnCopy", "btnShare", "btnPng", "btnPngShare"].forEach(id => $(id).disabled = !on);
   const n = allAreas().length;
   $("exportNote").textContent = on ? `文件名：${kmlName()}.kml` + (n > 1 ? `（${n} 个矿区都在里面，奥维里每个矿区一个文件夹）` : "") : "核对完坐标后可以导出";
 }
@@ -1420,16 +1411,8 @@ async function saveFile(blob, name) {
 }
 if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
 $("btnKml").onclick = async () => {
-  const how = await saveFile(new Blob([currentKml()], { type: "application/vnd.google-earth.kml+xml" }), kmlName() + ".kml");
-  $("exportNote").textContent = `已经交给浏览器下载 ${kmlName()}.kml（方式：${how === "sw" ? "中转" : "直接"}）。手机上在通知栏或「文件管理 → 下载」里找到它，点开选奥维，再点「导入」。没反应的话，看下面「手机上下载不了？」`;
-};
-// 办法二：把文件编成一个「data:」链接直接打开。有的手机浏览器会当成文件，弹出「用奥维打开」或「下载」
-$("btnKml2").onclick = () => {
-  const b64 = btoa(unescape(encodeURIComponent(currentKml())));
-  const url = "data:application/vnd.google-earth.kml+xml;charset=utf-8;base64," + b64;
-  const w = window.open(url, "_blank");
-  if (!w) location.href = url;
-  $("exportNote").textContent = "已经用第二种方式打开了文件。如果手机问「用什么打开」，选奥维；如果只显示了一堆文字，说明这个浏览器也不行，请换个浏览器。";
+  await saveFile(new Blob([currentKml()], { type: "application/vnd.google-earth.kml+xml" }), kmlName() + ".kml");
+  $("exportNote").textContent = `已经开始下载 ${kmlName()}.kml，在电脑的「下载」文件夹里。`;
 };
 function kmlFile() { return new File([currentKml()], kmlName() + ".kml", { type: "application/vnd.google-earth.kml+xml" }); }
 // 「分享」按钮：只在浏览器说能分享文件时才显示（微信里不显示）。
