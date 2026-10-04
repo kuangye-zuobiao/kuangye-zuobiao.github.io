@@ -130,6 +130,18 @@ body.mapfull { overflow: hidden; }
 .areatabs button em { font-style: normal; font-size: 11px; opacity: .7; }
 #map .mapcard .lg { display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #map .mapcard .lg i { flex: none; width: 10px; height: 10px; border-radius: 2px; }
+/* 周边情况 */
+.seg { display: inline-flex; background: var(--field); border-radius: 9px; padding: 2px; }
+.seg button { background: transparent; padding: 6px 11px; font-size: 13px; border-radius: 7px; }
+.seg button.on { background: var(--card); box-shadow: 0 1px 2px rgba(0,0,0,.15); font-weight: 600; }
+#nbOut h4 { font-size: 14px; margin: 14px 0 6px; }
+#nbOut ul { margin: 0; padding-left: 0; list-style: none; display: grid; gap: 5px; font-size: 14px; }
+#nbOut li { line-height: 1.55; }
+#nbOut li i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; box-shadow: 0 0 0 1px rgba(0,0,0,.25); vertical-align: 1px; }
+#nbOut .loc { background: var(--field); border-radius: 9px; padding: 9px 11px; font-size: 14px; line-height: 1.6; }
+#nbOut .tips li { background: var(--warn-bg); color: var(--warn); border-radius: 9px; padding: 8px 11px; }
+#nbOut .tips li.ok { background: var(--ok-bg); color: var(--ok); }
+#nbOut .none { color: var(--faint); font-size: 13px; }
 .cmbox { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--warn-bg); }
 .cmbox label.f { color: var(--warn); font-weight: 600; font-size: 13px; }
 .cmbox .hint { color: var(--warn); opacity: .85; }
@@ -229,7 +241,22 @@ footer { color: var(--faint); font-size: 12px; line-height: 1.7; margin-top: 18p
   </section>
 
   <section class="card">
-    <h2><span class="step">5</span>需要时，导到奥维</h2>
+    <h2><span class="step">5</span>周边有什么</h2>
+    <p class="hint" style="margin:-4px 0 10px">列出范围里和周边的村庄、河流、学校、公路、保护区等有名字的地点，并给出提醒要点。<b>点了才查</b>：会把当前矿区的范围发给天地图的地名查询，不经过任何 AI。</p>
+    <div class="btns" style="align-items:center">
+      <button id="btnNearby" class="primary" disabled>查周边情况</button>
+      <span class="seg" id="nbSeg"><button data-r="500">500 米</button><button data-r="1000" class="on">1 公里</button><button data-r="2000">2 公里</button></span>
+    </div>
+    <p class="hint" id="nbNote"></p>
+    <div id="nbOut"></div>
+    <div class="btns" id="nbTools" hidden>
+      <button id="btnNbCopy" class="small">复制这段文字</button>
+      <label class="hint" style="display:inline-flex;align-items:center;gap:6px;margin:0"><input type="checkbox" id="nbOnMap" checked style="width:auto">在地图上标出这些地点</label>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2><span class="step">6</span>需要时，导到奥维</h2>
     <p class="hint" style="margin:-4px 0 10px">要去现场导航到拐点、跟别的图层叠着看、长期存着的时候，才需要导进奥维。只是看位置、发截图，上一步就够了。</p>
     <div class="btns">
       <button id="btnKml" class="primary" disabled>下载 KML 文件</button>
@@ -249,7 +276,7 @@ footer { color: var(--faint); font-size: 12px; line-height: 1.7; margin-top: 18p
   </section>
 
   <footer>
-    坐标的识别（包括从图片里认字）、换算、核对和生成文件，全部在你自己的手机或电脑上完成，图片和坐标都不会上传，也不经过任何 AI。看卫星图时，地图服务商会知道你在看哪一片区域（跟打开任何地图一样），不想这样可以把底图选成「不加载底图」。<br>
+    坐标的识别（包括从图片里认字）、换算、核对和生成文件，全部在你自己的手机或电脑上完成，图片和坐标都不会上传，也不经过任何 AI。唯一的例外是第 5 步「查周边情况」：点了它，当前矿区的范围会发给天地图（国家地理信息公共服务平台）查地名，不点就不发。看卫星图时，地图服务商会知道你在看哪一片区域（跟打开任何地图一样），不想这样可以把底图选成「不加载底图」。<br>
     换算结果供查看参考，不能代替测绘成果。1980 西安、1954 北京坐标系没有当地转换参数，只能近似换算，图上位置可能差几十米到上百米。
   </footer>
 </main>
@@ -649,7 +676,7 @@ const areas = [];
 let cur = 0;
 function blankArea() {
   return { name: "", nameTouched: false, src: "", area: "", areaTouched: false, unit: "km2", datum: "cgcs2000", cm: "",
-           kind: null, rows: [], expected: null, parseNotes: [], rings: [], areaM2: 0 };
+           kind: null, rows: [], expected: null, parseNotes: [], rings: [], areaM2: 0, nearby: null };
 }
 function colorOf(i) { return COLORS[i % COLORS.length]; }
 function displayName(i) {
@@ -671,7 +698,7 @@ function loadArea(i) {
   a.areaTouched ? ($("area").dataset.touched = "1") : delete $("area").dataset.touched;
   Object.assign(state, { kind: a.kind, rows: a.rows, expected: a.expected, parseNotes: a.parseNotes, rings: a.rings, areaM2: a.areaM2, computed: null });
   $("ocrBox").style.display = "none";
-  renderTable(); recompute(true);
+  renderTable(); recompute(true); renderNearby();
 }
 function renderTabs() {
   const box = $("areaTabs");
@@ -790,7 +817,7 @@ function recompute(fit) {
     $("cmBox").hidden = readCM() == null;
     renderTabs();
     $("checks").innerHTML = `<li class="warn">${(state.parseNotes || [])[0] || "粘贴坐标后自动检查"}</li>`;
-    drawMap(fit); setExport(allAreas().length > 0); return;
+    nbSync(); drawMap(fit); setExport(allAreas().length > 0); return;
   }
   const datum = $("datum").value;
   const c = computePoints(state.rows, { kind: state.kind, datum, cm: readCM() });
@@ -863,13 +890,14 @@ function recompute(fit) {
   }
   $("checks").innerHTML = checks.map(([c, t]) => `<li class="${c}">${t}</li>`).join("");
   renderTabs();
+  nbSync(); renderNearby();
   drawMap(fit);
   setExport(allAreas().length > 0);
 }
 
 ["datum", "cm", "areaUnit"].forEach(id => $(id).addEventListener("input", () => recompute(true)));
 $("area").addEventListener("input", () => { $("area").dataset.touched = "1"; recompute(false); });
-$("name").addEventListener("input", () => { $("name").dataset.touched = "1"; renderTabs(); if (allAreas().length) drawMap(false); });
+$("name").addEventListener("input", () => { $("name").dataset.touched = "1"; renderTabs(); nbSync(); if (allAreas().length) drawMap(false); });
 let srcTimer;
 $("src").addEventListener("input", () => { clearTimeout(srcTimer); srcTimer = setTimeout(onSourceChange, 250); });
 $("btnExample").onclick = () => { $("src").value = EXAMPLE; delete $("area").dataset.touched; delete $("name").dataset.touched; onSourceChange(); };
@@ -954,6 +982,194 @@ const dropZone = $("src");
 ["dragenter", "dragover"].forEach(t => dropZone.addEventListener(t, e => { if ([...e.dataTransfer.items].some(i => i.kind === "file")) { e.preventDefault(); dropZone.classList.add("drop"); } }));
 ["dragleave", "drop"].forEach(t => dropZone.addEventListener(t, () => dropZone.classList.remove("drop")));
 dropZone.addEventListener("drop", e => { const f = [...e.dataTransfer.files].find(f => f.type.startsWith("image/")); if (f) { e.preventDefault(); ocrFile(f); } });
+
+// ── 周边有什么：点了才查。把当前矿区的范围发给天地图的地名查询（不经过 AI），按名字分类，再按规则给提醒 ──
+// 实测（2026-10-04）：个人开发者密钥连发太快会被「限流」，所以一个词一个词地查、间隔 0.6 秒，被限流就等一会儿重试；
+// 一次只能搜一个词；每次都按最远 2 公里查，切换 500 米 / 1 公里 / 2 公里只在已有结果里重新筛选
+const NB_MAX = 2000;
+let nbRadius = 1000, nbBusy = false;
+const NB_CATS = [
+  { key: "village", label: "村庄、居民点", color: "#ffffff", kws: ["村"],
+    norm: n => n.replace(/(村民委员会|村委会|村委)$/, "村"),
+    test: n => /(村|庄|屯|寨|堡|营|社区)$/.test(n) && !/(银行|商店|超市|ATM|卫生|学校|小学|中学|幼儿园|服务|驿站|酒店|宾馆|饭店|饭庄|酒庄|山庄|农庄|农家|厕|站|公司|厂|店|部|所|室|馆|中心|合作社|党)/.test(n) },
+  { key: "water", label: "河流、水库、湖泊", color: "#4fc3f7", kws: ["河", "水库", "湖"],
+    test: n => /(河|江|水库|湖|渠|湿地|海子|淀|潭|塘|溪|涧)$/.test(n) && !/(加油|桥|路|街|村|镇|乡|站|宾馆|酒店|饭店|小区|公司|店)/.test(n) },
+  { key: "protect", label: "保护区、公园、林场、水源地", color: "#66bb6a", kws: ["保护", "公园", "风景", "林场", "水源"],
+    test: n => /(保护区|保护地|保护站|森林公园|湿地公园|地质公园|国家公园|自然公园|风景名胜区|风景区|景区|林场|水源地|水源保护)/.test(n) },
+  { key: "school", label: "学校、医院", color: "#ffb74d", kws: ["学", "医院", "卫生院"],
+    test: n => /(小学|中学|学校|幼儿园|大学|学院|医院|卫生院|卫生室)/.test(n) && !/(路|街|站|店|超市|小区)$/.test(n) },
+  { key: "road", label: "公路、铁路", color: "#e0e0e0", kws: ["高速", "公路", "铁路"],
+    test: n => /(高速|国道|省道|县道|公路|铁路|火车站|隧道|大桥|服务区|收费站)/.test(n) && !/(加油|宾馆|酒店|饭店|店)/.test(n) },
+  { key: "culture", label: "寺庙、文物、墓地", color: "#ce93d8", kws: ["寺", "庙", "遗址", "墓"],
+    test: n => /(寺|庙|观|庵|祠|遗址|文物|古城|长城|墓|陵园|烈士)/.test(n) && !/(村|庄|坡|坪|沟|路|街|镇|乡|站|学|酒店|宾馆|饭店|商店|超市|小区)$/.test(n) },
+  { key: "power", label: "电站、变电站", color: "#fff176", kws: ["电站"],
+    test: n => /(变电站|电站|电厂|开关站)/.test(n) && !/(加油|充电)/.test(n) },
+  { key: "mine", label: "其他矿山、尾矿库", color: "#bcaaa4", kws: ["矿"],
+    test: n => /(矿|采石场|尾矿库|选厂|砂石)/.test(n) && !/(矿泉水|矿业大学)/.test(n) },
+];
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function ringsKey(rings) { return JSON.stringify(rings.map(r => r.map(p => [p.lon.toFixed(6), p.lat.toFixed(6)]))); }
+/** 调天地图；被限流就等一会儿再试 */
+async function tdtGet(url) {
+  for (let k = 0; k < 4; k++) {
+    let d = null;
+    try { d = await fetch(url).then(r => r.json()); } catch (e) {}
+    if (d && (d.code === 302010 || /限流/.test(d.msg || ""))) { await sleep(2500 * (k + 1)); continue; }
+    return d;
+  }
+  return null;
+}
+/** 点到矿区范围的距离（米）；在范围里面返回 0 */
+function distToRings(lon, lat, rings) {
+  const lat0 = lat * D2R, P = (x, y) => [x * Math.cos(lat0) * 111320, y * 110540], p = P(lon, lat);
+  let best = Infinity, inside = false;
+  rings.forEach(r => {
+    const q = r.map(v => P(v.lon, v.lat));
+    let c = false;
+    for (let i = 0, j = q.length - 1; i < q.length; j = i++) {
+      const [xi, yi] = q[i], [xj, yj] = q[j];
+      if ((yi > p[1]) !== (yj > p[1]) && p[0] < (xj - xi) * (p[1] - yi) / (yj - yi) + xi) c = !c;
+      const dx = xj - xi, dy = yj - yi, L = dx * dx + dy * dy;
+      let t = L ? ((p[0] - xi) * dx + (p[1] - yi) * dy) / L : 0; t = Math.max(0, Math.min(1, t));
+      best = Math.min(best, Math.hypot(p[0] - xi - t * dx, p[1] - yi - t * dy));
+    }
+    if (c) inside = true;
+  });
+  return inside ? 0 : best;
+}
+async function runNearby() {
+  if (nbBusy || !state.rings.length) return;
+  nbBusy = true; nbSync();
+  const area = areas[cur], rings = state.rings, pts = rings.flat();
+  const lons = pts.map(p => p.lon), lats = pts.map(p => p.lat);
+  const cLon = (Math.min(...lons) + Math.max(...lons)) / 2, cLat = (Math.min(...lats) + Math.max(...lats)) / 2;
+  const reach = Math.max(...pts.map(p => Math.hypot((p.lon - cLon) * Math.cos(cLat * D2R) * 111320, (p.lat - cLat) * 110540)));
+  const radius = Math.min(20000, Math.ceil(reach + NB_MAX + 100));
+  const q = o => encodeURIComponent(JSON.stringify(o));
+  const res = { key: ringsKey(rings), at: new Date(), loc: null, items: [], failed: [] };
+  try {
+    $("nbNote").textContent = "正在查所在地……";
+    const g = await tdtGet(`https://api.tianditu.gov.cn/geocoder?postStr=${q({ lon: +cLon.toFixed(6), lat: +cLat.toFixed(6), ver: 1 })}&type=geocode&tk=${TIANDITU_KEY}`);
+    if (g && g.result) res.loc = g.result.addressComponent || null;
+    const kws = NB_CATS.flatMap(c => c.kws), seen = new Map();
+    for (let i = 0; i < kws.length; i++) {
+      const kw = kws[i];
+      $("nbNote").textContent = `正在查「${kw}」……（${i + 1}/${kws.length}）`;
+      for (let start = 0; start < 300; start += 100) {
+        await sleep(600);
+        const d = await tdtGet(`https://api.tianditu.gov.cn/v2/search?postStr=${q({ keyWord: kw, queryType: "3", pointLonlat: cLon.toFixed(6) + "," + cLat.toFixed(6), queryRadius: String(radius), start: String(start), count: "100" })}&type=query&tk=${TIANDITU_KEY}`);
+        if (!d || !d.status || d.status.infocode !== 1000) { res.failed.push(kw); break; }
+        (d.pois || []).forEach(p => {
+          const [lon, lat] = String(p.lonlat || "").split(",").map(Number); if (!isFinite(lon) || !isFinite(lat)) return;
+          for (const c of NB_CATS) {
+            const name = c.norm ? c.norm(p.name) : p.name;
+            if (!c.test(name)) continue;
+            const dist = distToRings(lon, lat, rings); if (dist > NB_MAX) break;
+            const k = c.key + "|" + name, old = seen.get(k);
+            if (!old || dist < old.dist) seen.set(k, { cat: c.key, name, lon, lat, dist });
+            break;   // 一个地点只归一类
+          }
+        });
+        if (!(d.count > start + 100)) break;
+      }
+    }
+    res.items = [...seen.values()].sort((a, b) => a.dist - b.dist);
+    area.nearby = res;
+    $("nbNote").textContent = res.failed.length ? `有 ${res.failed.length} 个词没查成（${res.failed.join("、")}），可能是天地图暂时限流，稍后可以再查一次。` : "";
+  } catch (e) {
+    $("nbNote").textContent = "没查成：" + (e.message || e) + "。可能是网络或天地图暂时限流，稍后再试。";
+  } finally { nbBusy = false; nbSync(); renderNearby(); drawMap(false); }
+}
+function nbCurrent() { const a = areas[cur]; return a && a.nearby; }
+function nbStale() { const r = nbCurrent(); return !!r && r.key !== ringsKey(state.rings); }
+/** 按钮能不能点、结果是不是过期了 */
+function nbSync() {
+  $("btnNearby").disabled = nbBusy || !state.rings.length;
+  $("btnNearby").textContent = nbBusy ? "正在查……" : `查「${displayName(cur)}」周边情况`;
+  if (!nbBusy && nbStale()) $("nbNote").textContent = "坐标改过了，之前查的周边情况已经不准，请再点一次「查周边情况」。";
+}
+const fmtDist = d => d < 1000 ? `约 ${Math.max(10, Math.round(d / 10) * 10)} 米` : `约 ${(d / 1000).toFixed(1)} 公里`;
+const radiusLabel = () => nbRadius >= 1000 ? nbRadius / 1000 + " 公里" : nbRadius + " 米";
+/** 当前半径下要显示的结果 */
+function nbVisible() {
+  const r = nbCurrent(); if (!r || nbStale()) return [];
+  return r.items.filter(x => x.dist <= nbRadius);
+}
+function nbTips(r, inside, near) {
+  const tips = [], byCat = (list, k) => list.filter(x => x.cat === k), names = l => l.slice(0, 6).map(x => x.name).join("、") + (l.length > 6 ? ` 等 ${l.length} 处` : "");
+  const all = inside.concat(near), R = radiusLabel();
+  const vIn = byCat(inside, "village"), vNear = byCat(near, "village");
+  if (vIn.length) tips.push(`范围里有村庄（${names(vIn)}）：核实是否压覆村庄、有没有搬迁安置方案或协议；采矿用地的征收补偿；开采引起的地面塌陷、爆破震动对房屋的影响；社会稳定风险。`);
+  if (vNear.length) tips.push(`周边 ${R}以内有村庄（最近的是${vNear[0].name}，${fmtDist(vNear[0].dist)}）：注意爆破安全距离、粉尘和噪声；核实环评有没有把这些村庄列为敏感目标。`);
+  const w = byCat(all, "water");
+  if (w.length) tips.push(`涉及河流、水库、湖泊（${names(w)}）：向水利部门查河湖管理范围；核实是否在饮用水水源保护区；涉水的还要看防洪影响和取水许可。`);
+  const pr = byCat(all, "protect");
+  if (pr.length) tips.push(`名字里带保护区、公园、林场、水源地（${names(pr)}）：务必向林草部门书面查询矿区是否在其范围内、在哪个功能分区（水源地找生态环境、水利部门）。`);
+  const sc = byCat(all, "school");
+  if (sc.length) tips.push(`附近有学校、医院（${names(sc)}）：属于环境敏感目标，注意安全距离，看环评怎么处理。`);
+  const rd = byCat(all, "road");
+  if (rd.length) tips.push(`附近有公路、铁路（${names(rd)}）：核实公路、铁路两侧的保护范围，是否压覆，需不需要迁改或做安全评估。`);
+  const cu = byCat(all, "culture");
+  if (cu.length) tips.push(`附近有寺庙、文物、墓地（${names(cu)}）：向文物部门查是否为文物保护单位、保护范围多大；涉及坟墓的要考虑迁坟。`);
+  const pw = byCat(all, "power");
+  if (pw.length) tips.push(`附近有电站、变电站（${names(pw)}）：注意电力设施的保护范围，以及高压线是否穿过矿区。`);
+  const mi = byCat(all, "mine");
+  if (mi.length) tips.push(`附近有其他矿山或尾矿库（${names(mi)}）：核实相邻矿权边界有没有重叠、有无越界纠纷；尾矿库要看下游影响和安全距离。`);
+  if (!pr.length) tips.push({ ok: true, t: "没查到名字里带保护区、公园、林场的地点。但这不代表不在生态保护红线、自然保护地、林地里——那些边界只在部门系统里，只能书面查询。" });
+  tips.push({ ok: true, t: "天地图只收有名字的地点：零散房屋、无名小路、小河沟查不到，请结合卫星图自己看一眼。以上只是初筛，正式结论以部门书面查询为准。" });
+  return tips;
+}
+function nbPlace(L) { return L ? [L.province, L.city, L.county, L.town].filter((v, i, a) => v && a.indexOf(v) === i).join(" ") : ""; }
+function renderNearby() {
+  const r = nbCurrent(), box = $("nbOut");
+  $("nbTools").hidden = !r || nbStale();
+  if (!r) { box.innerHTML = ""; if (!nbBusy) $("nbNote").textContent = ""; return; }
+  if (nbStale()) { box.innerHTML = ""; nbSync(); return; }
+  const vis = nbVisible(), inside = vis.filter(x => x.dist === 0), near = vis.filter(x => x.dist > 0);
+  const L = r.loc, place = nbPlace(L), county = L && (L.county || L.city) || "当地";
+  const group = list => NB_CATS.map(c => ({ c, l: list.filter(x => x.cat === c.key) })).filter(g => g.l.length);
+  const ul = (list, withDist) => list.length ? `<ul>${group(list).map(g => `<li><i style="background:${g.c.color}"></i><b>${g.c.label}</b>：${g.l.map(x => xmlEsc(x.name) + (withDist ? `（${fmtDist(x.dist)}）` : "")).join("、")}</li>`).join("")}</ul>` : `<div class="none">没查到有名字的地点</div>`;
+  const tips = nbTips(r, inside, near);
+  box.innerHTML =
+    `<div class="loc"><b>所在地</b>：${xmlEsc(place || "没查到")}${L && L.road ? `；最近的路：${xmlEsc(L.road)}（${fmtDist(+L.road_distance || 0)}）` : ""}<br>` +
+    `<b>该找哪些部门</b>：查生态保护红线、永久基本农田、压覆矿产，找${xmlEsc(county)}的自然资源部门；查自然保护地、林地、公益林、草原，找${xmlEsc(county)}的林草部门；查河湖管理范围，找${xmlEsc(county)}的水利部门。</div>` +
+    `<h4>范围里</h4>${ul(inside, false)}<h4>周边 ${radiusLabel()}以内</h4>${ul(near, true)}` +
+    `<h4>提醒要点</h4><ul class="tips">${tips.map(t => typeof t === "string" ? `<li>${xmlEsc(t)}</li>` : `<li class="ok">${xmlEsc(t.t)}</li>`).join("")}</ul>` +
+    `<p class="hint">查询时间：${r.at.toLocaleString("zh-CN", { hour12: false })}。数据来自天地图地名库。</p>`;
+}
+function nbText() {
+  const r = nbCurrent(); if (!r) return "";
+  const vis = nbVisible(), inside = vis.filter(x => x.dist === 0), near = vis.filter(x => x.dist > 0), L = r.loc;
+  const lines = [`【${displayName(cur)} · 周边情况】`];
+  if (L) lines.push("所在地：" + nbPlace(L) + (L.road ? `；最近的路：${L.road}（${fmtDist(+L.road_distance || 0)}）` : ""));
+  const block = (title, list, withDist) => {
+    lines.push(title);
+    const gs = NB_CATS.map(c => ({ c, l: list.filter(x => x.cat === c.key) })).filter(g => g.l.length);
+    if (!gs.length) lines.push("  没查到有名字的地点");
+    gs.forEach(g => lines.push(`  ${g.c.label}：` + g.l.map(x => x.name + (withDist ? `（${fmtDist(x.dist)}）` : "")).join("、")));
+  };
+  block("范围里：", inside, false); block(`周边 ${radiusLabel()}以内：`, near, true);
+  lines.push("提醒要点：");
+  nbTips(r, inside, near).forEach((t, i) => lines.push(`  ${i + 1}. ` + (typeof t === "string" ? t : t.t)));
+  lines.push(`（查询时间 ${r.at.toLocaleString("zh-CN", { hour12: false })}，数据来自天地图地名库，仅供初筛）`);
+  return lines.join("\n");
+}
+$("btnNearby").onclick = runNearby;
+$("nbSeg").addEventListener("click", e => {
+  const b = e.target.closest("button[data-r]"); if (!b) return;
+  nbRadius = +b.dataset.r;
+  $("nbSeg").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b));
+  renderNearby(); drawMap(false);
+});
+$("nbOnMap").addEventListener("change", () => drawMap(false));
+$("btnNbCopy").onclick = async () => {
+  const t = nbText();
+  try { await navigator.clipboard.writeText(t); $("nbNote").textContent = "已复制，可以贴进报告或微信。"; }
+  catch (e) { prompt("复制下面的内容：", t); }
+};
+/** 地图上要标出来的周边地点（当前矿区、当前半径、勾选了才标） */
+function nbMarkers() { return $("nbOnMap").checked ? nbVisible() : []; }
+const NB_COLOR = Object.fromEntries(NB_CATS.map(c => [c.key, c.color]));
 
 // ── 导出 ──
 function kmlName() {
@@ -1096,7 +1312,13 @@ function drawMap(fit) {
     });
     if (multi) { const c = labelPoint(a.rings[0], sx, sy); names += `<text x="${c[0].toFixed(1)}" y="${c[1].toFixed(1)}" text-anchor="middle" font-size="13" font-weight="700" fill="${a.color}" stroke="#000" stroke-width="3.5" paint-order="stroke">${xmlEsc(a.name)}</text>`; }
   });
-  map.el.querySelector("svg").innerHTML = svg + names;
+  let marks = "";
+  nbMarkers().forEach(m => {
+    const x = sx(m).toFixed(1), y = sy(m).toFixed(1);
+    marks += `<circle cx="${x}" cy="${y}" r="4" fill="${NB_COLOR[m.cat]}" stroke="#000" stroke-width="1.2"/>` +
+             `<text x="${+x + 6}" y="${+y + 4}" font-size="11" fill="#fff" stroke="#000" stroke-width="3" paint-order="stroke">${xmlEsc(m.name)}</text>`;
+  });
+  map.el.querySelector("svg").innerHTML = svg + marks + names;
   // 说明牌（多个矿区时是图例）、比例尺
   const info = mapInfo();
   $("mapCard").innerHTML = `<b>${xmlEsc(info.title)}</b>` + (info.legend
@@ -1190,6 +1412,12 @@ async function renderMapImage() {
       });
     }
   });
+  // 周边地点
+  g.font = `${11 * S}px ${FONT}`;
+  nbMarkers().forEach(m => {
+    g.beginPath(); g.arc(sx(m), sy(m), 4 * S, 0, Math.PI * 2); g.fillStyle = NB_COLOR[m.cat]; g.fill(); g.strokeStyle = "#000"; g.lineWidth = 1.2 * S; g.stroke();
+    g.lineWidth = 3 * S; g.strokeStyle = "#000"; g.strokeText(m.name, sx(m) + 6 * S, sy(m) + 4 * S); g.fillStyle = "#fff"; g.fillText(m.name, sx(m) + 6 * S, sy(m) + 4 * S);
+  });
   if (multi) {   // 矿区名字
     g.font = `700 ${13 * S}px ${FONT}`; g.textAlign = "center";
     list.forEach(a => { const c = labelPoint(a.rings[0], sx, sy); g.lineWidth = 3.5 * S; g.strokeStyle = "#000"; g.strokeText(a.name, c[0], c[1]); g.fillStyle = a.color; g.fillText(a.name, c[0], c[1]); });
@@ -1226,7 +1454,7 @@ async function renderMapImage() {
   return { cv, missing: jobs.length - tiles.length };
 }
 let pngCache = null;   // 分享要在点击后很快发起，所以第一次画好先存着，第二次点直接用
-function pngKey() { return [map.z, map.cx.toFixed(0), map.cy.toFixed(0), map.w, map.h, $("basemap").value, cur, ...allAreas().map(a => a.name + a.areaM2)].join("|"); }
+function pngKey() { return [map.z, map.cx.toFixed(0), map.cy.toFixed(0), map.w, map.h, $("basemap").value, cur, nbRadius, nbMarkers().length, ...allAreas().map(a => a.name + a.areaM2)].join("|"); }
 async function getPng() {
   if (pngCache && pngCache.key === pngKey()) return pngCache;
   $("pngNote").textContent = "正在生成图片……";
