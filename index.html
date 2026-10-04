@@ -90,7 +90,7 @@ td.del button { padding: 5px 8px; background: transparent; color: var(--faint); 
 .checks li b { font-weight: 600; }
 
 /* 地图 */
-#map { position: relative; height: 340px; border-radius: 10px; overflow: hidden; background: var(--field);
+#map { position: relative; height: 380px; border-radius: 10px; overflow: hidden; background: var(--field);
   touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; }
 #map .tiles img { position: absolute; width: 256px; height: 256px; max-width: none; pointer-events: none; }
 #map svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
@@ -130,6 +130,20 @@ body.mapfull { overflow: hidden; }
 .areatabs button em { font-style: normal; font-size: 11px; opacity: .7; }
 #map .mapcard .lg { display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #map .mapcard .lg i { flex: none; width: 10px; height: 10px; border-radius: 2px; }
+#map .mapcard .lg .hatch { width: 10px; height: 10px; margin-right: 0; }
+/* 两期对比 */
+.cmpbox { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: var(--field); font-size: 14px; }
+.cmpbox select { width: auto; padding: 5px 8px; font-size: 13px; background: var(--card); }
+.cmprow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; }
+#cmpOut ul { margin: 8px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+#cmpOut li.warn { color: var(--warn); }
+.hatch { display: inline-block; width: 12px; height: 12px; border-radius: 2px; vertical-align: -1px; margin-right: 6px; }
+.hatch.cut { background: repeating-linear-gradient(45deg, #555 0 2px, #fff 2px 5px); }
+.hatch.add { background: repeating-linear-gradient(45deg, #2e9e43 0 2px, #e9f7ec 2px 5px); }
+/* 现场定位 */
+#locNote { font-size: 14px; color: var(--ink); background: var(--field); border-radius: 9px; padding: 8px 11px; }
+#locNote:empty { display: none; }
+#zloc.on { background: #1a73e8; color: #fff; }
 /* 周边情况 */
 .seg { display: inline-flex; background: var(--field); border-radius: 9px; padding: 2px; }
 .seg button { background: transparent; padding: 6px 11px; font-size: 13px; border-radius: 7px; }
@@ -222,13 +236,19 @@ footer { color: var(--faint); font-size: 12px; line-height: 1.7; margin-top: 18p
       <div class="mapcard" id="mapCard" hidden></div>
       <div class="scalebar" id="mapScale" hidden><span></span><i></i></div>
       <div class="north" id="mapNorth" hidden>N</div>
-      <div class="zoom"><button id="zin" aria-label="放大">＋</button><button id="zout" aria-label="缩小">－</button><button id="zfit" aria-label="回到范围" style="font-size:13px">◎</button><button id="zfull" aria-label="全屏看" style="font-size:15px">⤢</button></div>
+      <div class="zoom"><button id="zin" aria-label="放大">＋</button><button id="zout" aria-label="缩小">－</button><button id="zfit" aria-label="回到范围" style="font-size:13px">◎</button><button id="zfull" aria-label="全屏看" style="font-size:15px">⤢</button><button id="zloc" aria-label="我在哪" style="font-size:16px">⌖</button></div>
       <div class="attr" id="attr"></div></div>
     <div class="btns">
       <button id="btnPng" class="primary" disabled>保存成图片</button>
       <button id="btnPngShare" style="display:none" disabled>分享图片</button>
     </div>
     <p class="hint" id="pngNote"></p>
+    <p id="locNote"></p>
+    <div class="cmpbox" id="cmpBox" hidden>
+      <b>两期范围对比</b>（延续缩区、前后两张证范围对不上时用）
+      <div class="cmprow">旧证 <select id="cmpOld"></select> → 新证 <select id="cmpNew"></select> <button id="btnCmp" class="small">对比</button></div>
+      <div id="cmpOut"></div>
+    </div>
     <div class="maptools">
       <span>底图：</span>
       <select id="basemap" style="width:auto;padding:5px 8px;font-size:12px">
@@ -237,7 +257,7 @@ footer { color: var(--faint); font-size: 12px; line-height: 1.7; margin-top: 18p
       </select>
       <span id="baseNote"></span>
     </div>
-    <p class="hint">框跑到别的地方，多半是带号或某个点抄错了。点 ⤢ 可以全屏看，截图更大。</p>
+    <p class="hint">框跑到别的地方，多半是带号或某个点抄错了。点 ⤢ 可以全屏看，截图更大；在现场点 ⌖ 看自己在不在矿区里（位置只在手机里用，不上传）。</p>
   </section>
 
   <section class="card">
@@ -712,7 +732,9 @@ $("areaTabs").addEventListener("click", e => {
   if (b.id === "areaAdd") { saveCur(); areas.push(blankArea()); loadArea(areas.length - 1); $("src").focus(); return; }
   if (b.id === "areaDel") {
     if ((state.rows.length || $("src").value.trim()) && !confirm(`删除「${displayName(cur)}」？`)) return;
-    areas.splice(cur, 1); loadArea(Math.min(cur, areas.length - 1)); return;
+    const gone = cur; areas.splice(cur, 1);
+    [["old"], ["neu"]].forEach(([k]) => { if (cmp[k] === gone) cmp.on = false; else if (cmp[k] > gone) cmp[k]--; });
+    loadArea(Math.min(cur, areas.length - 1)); return;
   }
   if (b.dataset.area != null) { const i = +b.dataset.area; if (i === cur) return; saveCur(); loadArea(i); }
 });
@@ -817,7 +839,7 @@ function recompute(fit) {
     $("cmBox").hidden = readCM() == null;
     renderTabs();
     $("checks").innerHTML = `<li class="warn">${(state.parseNotes || [])[0] || "粘贴坐标后自动检查"}</li>`;
-    nbSync(); drawMap(fit); setExport(allAreas().length > 0); return;
+    nbSync(); cmpSync(); drawMap(fit); setExport(allAreas().length > 0); return;
   }
   const datum = $("datum").value;
   const c = computePoints(state.rows, { kind: state.kind, datum, cm: readCM() });
@@ -890,7 +912,8 @@ function recompute(fit) {
   }
   $("checks").innerHTML = checks.map(([c, t]) => `<li class="${c}">${t}</li>`).join("");
   renderTabs();
-  nbSync(); renderNearby();
+  nbSync(); renderNearby(); cmpSync();
+  if (geo.pos) $("locNote").innerHTML = locText();
   drawMap(fit);
   setExport(allAreas().length > 0);
 }
@@ -982,6 +1005,144 @@ const dropZone = $("src");
 ["dragenter", "dragover"].forEach(t => dropZone.addEventListener(t, e => { if ([...e.dataTransfer.items].some(i => i.kind === "file")) { e.preventDefault(); dropZone.classList.add("drop"); } }));
 ["dragleave", "drop"].forEach(t => dropZone.addEventListener(t, () => dropZone.classList.remove("drop")));
 dropZone.addEventListener("drop", e => { const f = [...e.dataTransfer.files].find(f => f.type.startsWith("image/")); if (f) { e.preventDefault(); ocrFile(f); } });
+
+// ── 两期范围对比：旧证、新证各输成一个矿区，算保留、缩掉、新增各多少 ──
+// 面积用「竖条切片」精确算：把所有拐点和边的交点的横坐标排好，相邻两条竖线之间，重叠长度随位置线性变化，取中点乘宽度就是精确值
+const cmp = { on: false, old: 0, neu: 1 };
+function cmpXY(listRings) {
+  const pts = listRings.flat(2), cm = pts.reduce((s, p) => s + p.lon, 0) / pts.length;
+  return listRings.map(rings => rings.map(r => r.map(p => { const g = gkForward(p.lat, p.lon, cm, "cgcs2000"); return [g.y, g.x]; })));
+}
+function shoelace(rings) { return rings.reduce((s, r) => { let a = 0; for (let i = 0; i < r.length; i++) { const p = r[i], q = r[(i + 1) % r.length]; a += p[0] * q[1] - q[0] * p[1]; } return s + Math.abs(a) / 2; }, 0); }
+function vCross(rings, x) {
+  const ys = [];
+  rings.forEach(r => { for (let i = 0, j = r.length - 1; i < r.length; j = i++) { const [x1, y1] = r[j], [x2, y2] = r[i]; if ((x1 > x) !== (x2 > x)) ys.push(y1 + (x - x1) * (y2 - y1) / (x2 - x1)); } });
+  ys.sort((a, b) => a - b); const iv = []; for (let k = 0; k + 1 < ys.length; k += 2) iv.push([ys[k], ys[k + 1]]); return iv;
+}
+function ivOverlap(a, b) { let s = 0, i = 0, j = 0; while (i < a.length && j < b.length) { const lo = Math.max(a[i][0], b[j][0]), hi = Math.min(a[i][1], b[j][1]); if (hi > lo) s += hi - lo; if (a[i][1] < b[j][1]) i++; else j++; } return s; }
+function segX(p1, p2, q1, q2) {
+  const r = [p2[0] - p1[0], p2[1] - p1[1]], s2 = [q2[0] - q1[0], q2[1] - q1[1]], d = r[0] * s2[1] - r[1] * s2[0];
+  if (Math.abs(d) < 1e-12) return null;
+  const t = ((q1[0] - p1[0]) * s2[1] - (q1[1] - p1[1]) * s2[0]) / d, u = ((q1[0] - p1[0]) * r[1] - (q1[1] - p1[1]) * r[0]) / d;
+  return t >= 0 && t <= 1 && u >= 0 && u <= 1 ? p1[0] + t * r[0] : null;
+}
+function interArea(A, B) {
+  const xs = new Set(); [...A, ...B].forEach(r => r.forEach(p => xs.add(p[0])));
+  const edges = R => R.flatMap(r => r.map((p, i) => [p, r[(i + 1) % r.length]]));
+  const eA = edges(A), eB = edges(B);
+  eA.forEach(([p1, p2]) => eB.forEach(([q1, q2]) => { const x = segX(p1, p2, q1, q2); if (x != null) xs.add(x); }));
+  const X = [...xs].sort((a, b) => a - b); let area = 0;
+  for (let k = 0; k + 1 < X.length; k++) { const w = X[k + 1] - X[k]; if (w < 1e-9) continue; const xm = (X[k] + X[k + 1]) / 2; area += w * ivOverlap(vCross(A, xm), vCross(B, xm)); }
+  return area;
+}
+/** 对比结果；条件不够（不到两个矿区、选了同一个）返回 null */
+function cmpResult() {
+  if (!cmp.on) return null;
+  const list = allAreas(), o = list.find(a => a.i === cmp.old), n = list.find(a => a.i === cmp.neu);
+  if (!o || !n || o === n) return null;
+  const [A, B] = cmpXY([o.rings, n.rings]);
+  const aO = shoelace(A), aN = shoelace(B), keep = Math.min(interArea(A, B), aO, aN);
+  return { o, n, aO, aN, keep, cut: Math.max(0, aO - keep), add: Math.max(0, aN - keep) };
+}
+function cmpSync() {
+  const list = allAreas(), box = $("cmpBox");
+  box.hidden = list.length < 2;
+  if (list.length < 2) { cmp.on = false; $("cmpOut").innerHTML = ""; return; }
+  const opts = list.map(a => `<option value="${a.i}">${xmlEsc(a.name)}</option>`).join("");
+  if (!list.some(a => a.i === cmp.old)) cmp.old = list[0].i;
+  if (!list.some(a => a.i === cmp.neu) || cmp.neu === cmp.old) cmp.neu = (list.find(a => a.i !== cmp.old) || list[0]).i;
+  $("cmpOld").innerHTML = opts; $("cmpNew").innerHTML = opts;
+  $("cmpOld").value = cmp.old; $("cmpNew").value = cmp.neu;
+  $("btnCmp").textContent = cmp.on ? "取消对比" : "对比";
+  const r = cmpResult();
+  if (!r) { $("cmpOut").innerHTML = cmp.on ? `<ul><li class="warn">请选两个不同的矿区。</li></ul>` : ""; return; }
+  const km = v => (v / 1e6).toFixed(4) + " 平方公里", pct = (v, base) => base ? (v / base * 100).toFixed(1) + "%" : "-";
+  const notes = [];
+  if (r.keep < 1) notes.push(`两期范围<b>完全不重合</b>：核实是不是同一个矿权，或者坐标系、带号是否抄错。`);
+  else {
+    if (r.cut / r.aO > 0.0005) notes.push(`缩掉 ${pct(r.cut, r.aO)}。续期有面积扣减要求，是否达标请对照现行规定核实；同时看缩掉的那块里有没有已发现的矿体、已做的工程（图上灰色斜线部分）。`);
+    if (r.add / r.aN > 0.0005) notes.push(`新证比旧证<b>多出一块</b>（图上绿色斜线部分）：续期一般只缩不扩，多出的部分要核实依据和审批。`);
+    if (r.cut / r.aO <= 0.0005 && r.add / r.aN <= 0.0005) notes.push("两期范围基本一致。");
+  }
+  $("cmpOut").innerHTML = `<ul>
+    <li>旧证「${xmlEsc(r.o.name)}」：${km(r.aO)}；新证「${xmlEsc(r.n.name)}」：${km(r.aN)}</li>
+    <li>保留（两期都有）：${km(r.keep)}，占旧证 ${pct(r.keep, r.aO)}</li>
+    <li><span class="hatch cut"></span>缩掉（旧证有、新证没有）：${km(r.cut)}，占旧证 ${pct(r.cut, r.aO)}</li>
+    <li><span class="hatch add"></span>新增（新证有、旧证没有）：${km(r.add)}，占新证 ${pct(r.add, r.aN)}</li>
+    ${notes.map(t => `<li class="warn">${t}</li>`).join("")}</ul>`;
+}
+$("btnCmp").onclick = () => { cmp.on = !cmp.on; cmpSync(); drawMap(false); };
+["cmpOld", "cmpNew"].forEach(id => $(id).addEventListener("input", () => { cmp.old = +$("cmpOld").value; cmp.neu = +$("cmpNew").value; cmpSync(); drawMap(false); }));
+
+// ── 现场定位：手机定位，看自己在不在矿区里。位置只在手机里用，不上传 ──
+const geo = { watch: null, pos: null, fitted: false };
+const DIRS = ["北", "东北", "东", "东南", "南", "西南", "西", "西北"];
+function bearing(lon1, lat1, lon2, lat2) {
+  const dx = (lon2 - lon1) * Math.cos(lat1 * D2R), dy = lat2 - lat1;
+  return DIRS[Math.round(((Math.atan2(dx, dy) / D2R) + 360) % 360 / 45) % 8];
+}
+/** 当前位置跟某个矿区的关系：在不在里面、离边界多远、最近的边界点和拐点 */
+function locRel(lon, lat, rings) {
+  const lat0 = lat * D2R, P = (x, y) => [x * Math.cos(lat0) * 111320, y * 110540], p = P(lon, lat);
+  let best = { d: Infinity }, inside = false, nv = { d: Infinity };
+  rings.forEach(r => {
+    const q = r.map(v => P(v.lon, v.lat)); let c = false;
+    for (let i = 0, j = q.length - 1; i < q.length; j = i++) {
+      const [xi, yi] = q[i], [xj, yj] = q[j];
+      if ((yi > p[1]) !== (yj > p[1]) && p[0] < (xj - xi) * (p[1] - yi) / (yj - yi) + xi) c = !c;
+      const dx = xj - xi, dy = yj - yi, L = dx * dx + dy * dy;
+      let t = L ? ((p[0] - xi) * dx + (p[1] - yi) * dy) / L : 0; t = Math.max(0, Math.min(1, t));
+      const d = Math.hypot(p[0] - xi - t * dx, p[1] - yi - t * dy);
+      if (d < best.d) best = { d, lon: r[i].lon + t * (r[j].lon - r[i].lon), lat: r[i].lat + t * (r[j].lat - r[i].lat) };
+      const dv = Math.hypot(p[0] - xi, p[1] - yi); if (dv < nv.d) nv = { d: dv, label: r[i].label };
+    }
+    if (c) inside = true;
+  });
+  return { inside, edge: best, vertex: nv };
+}
+function locText() {
+  const g = geo.pos; if (!g) return "";
+  const list = allAreas(); if (!list.length) return "已经定到你的位置。先输入矿区坐标，才能判断你在不在范围里。";
+  const acc = Math.round(g.acc), rels = list.map(a => ({ a, r: locRel(g.lon, g.lat, a.rings) }));
+  const fmt = d => d < 1000 ? `约 ${Math.round(d)} 米` : `约 ${(d / 1000).toFixed(2)} 公里`;
+  const accTxt = `（手机定位误差约 ±${acc} 米）`;
+  const inn = rels.filter(x => x.r.inside);
+  let t;
+  if (inn.length) {
+    const x = inn.slice().sort((p, q) => p.r.edge.d - q.r.edge.d)[0], names = inn.map(y => "「" + y.a.name + "」").join("");
+    t = x.r.edge.d < g.acc
+      ? `你离「${x.a.name}」边界只有${fmt(x.r.edge.d)}，比手机定位误差还小，<b>分不清在里面还是外面</b>${accTxt}。`
+      : `<b>你在${names}范围里</b>，离最近的边界${fmt(x.r.edge.d)}（在你的${bearing(g.lon, g.lat, x.r.edge.lon, x.r.edge.lat)}方向）${accTxt}。`;
+    // 两期对比打开时：站在「旧证有、新证没有」的那块上，直接说出来
+    const cr = cmpResult();
+    if (cr && inn.some(y => y.a.i === cr.o.i) && !inn.some(y => y.a.i === cr.n.i)) t += `<br><b>你站的位置在缩掉的那块里</b>（旧证有、新证没有）。`;
+    if (cr && inn.some(y => y.a.i === cr.n.i) && !inn.some(y => y.a.i === cr.o.i)) t += `<br><b>你站的位置在新增的那块里</b>（新证有、旧证没有）。`;
+  } else {
+    const x = rels.sort((p, q) => p.r.edge.d - q.r.edge.d)[0];
+    t = x.r.edge.d < g.acc
+      ? `你离「${x.a.name}」边界只有${fmt(x.r.edge.d)}，比手机定位误差还小，<b>分不清在里面还是外面</b>${accTxt}。`
+      : `<b>你不在矿区范围里</b>。离「${x.a.name}」最近的边界${fmt(x.r.edge.d)}，在你的${bearing(g.lon, g.lat, x.r.edge.lon, x.r.edge.lat)}方向；最近的拐点是 ${xmlEsc(x.r.vertex.label || "")} 号，${fmt(x.r.vertex.d)}${accTxt}。`;
+  }
+  return t + `<br><span class="hint">第一次在现场用，请先在一个确定的位置（比如路口）看看蓝点准不准。位置只在手机里用，不上传。</span>`;
+}
+function locStop(msg) {
+  if (geo.watch != null) navigator.geolocation.clearWatch(geo.watch);
+  geo.watch = null; geo.pos = null; geo.fitted = false; $("zloc").classList.remove("on");
+  $("locNote").innerHTML = msg || ""; drawMap(false);
+}
+$("zloc").onclick = e => {
+  e.stopPropagation();
+  if (geo.watch != null) { locStop(""); return; }
+  if (!navigator.geolocation) { $("locNote").textContent = "这个浏览器不支持定位。"; return; }
+  $("zloc").classList.add("on"); $("locNote").textContent = "正在定位……第一次会问你允不允许使用位置，请点「允许」。";
+  geo.watch = navigator.geolocation.watchPosition(p => {
+    geo.pos = { lon: p.coords.longitude, lat: p.coords.latitude, acc: p.coords.accuracy || 0 };
+    $("locNote").innerHTML = locText();
+    drawMap(!geo.fitted); geo.fitted = true;
+  }, err => {
+    locStop(err.code === 1 ? "没有定位权限：请在浏览器或手机设置里，允许这个网站使用位置，再点一次 ⌖。" : "没定到位置：请到开阔的地方、打开手机定位后再点一次 ⌖。");
+  }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 });
+};
 
 // ── 周边有什么：点了才查。把当前矿区的范围发给天地图的地名查询（不经过 AI），按名字分类，再按规则给提醒 ──
 // 实测（2026-10-04）：个人开发者密钥连发太快会被「限流」，所以一个词一个词地查、间隔 0.6 秒，被限流就等一会儿重试；
@@ -1257,15 +1418,15 @@ function baseLabel() {
   return TIANDITU_KEY ? "© 天地图" : "Esri World Imagery";
 }
 function fitMap() {
-  const all = allAreas().flatMap(a => a.rings.flat()).concat(nbMarkers()); if (!all.length) return;   // 周边地点也框进来
+  const all = allAreas().flatMap(a => a.rings.flat()).concat(nbMarkers()).concat(geo.pos ? [geo.pos] : []); if (!all.length) return;   // 周边地点、自己的位置也框进来
   map.w = map.el.clientWidth; map.h = map.el.clientHeight;
   const lats = all.map(p => p.lat), lons = all.map(p => p.lon);
-  const nA = allAreas().length, reserve = nA > 1 ? 40 + 18 * nA : 70;   // 上面给说明牌（图例）留的高度
+  const nA = allAreas().length, reserve = (nA > 1 ? 40 + 18 * nA : 70) + (cmpResult() ? 36 : 0);   // 上面给说明牌（图例）留的高度
   let z = 18;
   for (; z > 2; z--) {
     const dx = lon2px(Math.max(...lons), z) - lon2px(Math.min(...lons), z);
     const dy = lat2px(Math.min(...lats), z) - lat2px(Math.max(...lats), z);
-    if (dx < map.w - 80 && dy < map.h - reserve - 80) break;   // 上面留出说明牌的位置
+    if (dx < map.w - 60 && dy < map.h - reserve - 50) break;   // 上面留出说明牌的位置
   }
   map.z = z;
   map.cx = (lon2px(Math.max(...lons), z) + lon2px(Math.min(...lons), z)) / 2;
@@ -1299,6 +1460,7 @@ function drawMap(fit) {
   const sx = p => lon2px(p.lon, map.z) - ox, sy = p => lat2px(p.lat, map.z) - oy;
   // 当前编辑的矿区画在最上面、线粗一点；拐点编号只标当前这个，其他矿区在中间标名字
   let svg = "", names = "";
+  const placed = [];   // 已经放下的矿区名字位置，避免叠在一起
   [...list.filter(a => !a.cur), ...list.filter(a => a.cur)].forEach(a => {
     const col = list.length === 1 ? "var(--shape)" : a.color;
     a.rings.forEach(r => {
@@ -1310,7 +1472,7 @@ function drawMap(fit) {
       svg += `<circle cx="${x}" cy="${y}" r="3.5" fill="#fff" stroke="${col}" stroke-width="2"/>`;
       svg += `<text x="${+x + 6}" y="${+y - 6}" font-size="12" font-weight="600" fill="#fff" stroke="#000" stroke-width="3" paint-order="stroke">${xmlEsc(p.label)}</text>`;
     });
-    if (multi) { const c = labelPoint(a.rings[0], sx, sy); names += `<text x="${c[0].toFixed(1)}" y="${c[1].toFixed(1)}" text-anchor="middle" font-size="13" font-weight="700" fill="${a.color}" stroke="#000" stroke-width="3.5" paint-order="stroke">${xmlEsc(a.name)}</text>`; }
+    if (multi) { const c = placeLabel(labelPoint(a.rings[0], sx, sy), placed, 18); names += `<text x="${c[0].toFixed(1)}" y="${c[1].toFixed(1)}" text-anchor="middle" font-size="13" font-weight="700" fill="${a.color}" stroke="#000" stroke-width="3.5" paint-order="stroke">${xmlEsc(a.name)}</text>`; }
   });
   let marks = "";
   nbMarkers().forEach(m => {
@@ -1318,12 +1480,31 @@ function drawMap(fit) {
     marks += `<circle cx="${x}" cy="${y}" r="4" fill="${NB_COLOR[m.cat]}" stroke="#000" stroke-width="1.2"/>` +
              `<text x="${+x + 6}" y="${+y + 4}" font-size="11" fill="#fff" stroke="#000" stroke-width="3" paint-order="stroke">${xmlEsc(m.name)}</text>`;
   });
-  map.el.querySelector("svg").innerHTML = svg + marks + names;
+  // 两期对比：缩掉的灰色斜线、新增的绿色斜线（用遮罩直接画「旧减新」「新减旧」）
+  let hatch = "";
+  const cr = cmpResult();
+  if (cr) {
+    const dOf = rings => rings.map(r => r.map((p, i) => (i ? "L" : "M") + sx(p).toFixed(1) + " " + sy(p).toFixed(1)).join(" ") + " Z").join(" ");
+    const dO = dOf(cr.o.rings), dN = dOf(cr.n.rings);
+    hatch = `<defs><pattern id="hCut" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="7" height="7" fill="rgba(30,30,30,.35)"/><line x1="0" y1="0" x2="0" y2="7" stroke="#fff" stroke-width="2.4"/></pattern>` +
+      `<pattern id="hAdd" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="7" height="7" fill="rgba(46,158,67,.3)"/><line x1="0" y1="0" x2="0" y2="7" stroke="#7bd64a" stroke-width="2.4"/></pattern>` +
+      `<mask id="mCut"><path d="${dO}" fill="#fff"/><path d="${dN}" fill="#000"/></mask><mask id="mAdd"><path d="${dN}" fill="#fff"/><path d="${dO}" fill="#000"/></mask></defs>` +
+      `<rect x="0" y="0" width="${map.w}" height="${map.h}" fill="url(#hCut)" mask="url(#mCut)"/><rect x="0" y="0" width="${map.w}" height="${map.h}" fill="url(#hAdd)" mask="url(#mAdd)"/>`;
+  }
+  // 自己的位置：蓝点 + 误差圈
+  let me = "";
+  if (geo.pos) {
+    const mpp = 40075016.686 * Math.cos(geo.pos.lat * D2R) / (TILE * Math.pow(2, map.z)), x = sx(geo.pos), y = sy(geo.pos);
+    me = `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${Math.max(6, geo.pos.acc / mpp).toFixed(1)}" fill="rgba(26,115,232,.15)" stroke="rgba(26,115,232,.5)"/>` +
+         `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="6" fill="#1a73e8" stroke="#fff" stroke-width="2.5"/>`;
+  }
+  map.el.querySelector("svg").innerHTML = hatch + svg + marks + names + me;
   // 说明牌（多个矿区时是图例）、比例尺
   const info = mapInfo();
+  const cmpRows = cr ? `<div class="lg"><span class="hatch cut"></span>缩掉 约 ${fmtAreaShort(cr.cut)}</div><div class="lg"><span class="hatch add"></span>新增 约 ${fmtAreaShort(cr.add)}</div>` : "";
   $("mapCard").innerHTML = `<b>${xmlEsc(info.title)}</b>` + (info.legend
     ? info.legend.map(l => `<div class="lg"><i style="background:${l.color}"></i>${xmlEsc(l.text)}</div>`).join("")
-    : xmlEsc(info.line) + "<br>") + `<small>${xmlEsc(info.small)}</small>`;
+    : xmlEsc(info.line) + "<br>") + cmpRows + `<small>${xmlEsc(info.small)}</small>`;
   const sb = scaleBar(90);
   $("mapScale").querySelector("span").textContent = sb.label;
   $("mapScale").querySelector("i").style.width = sb.px.toFixed(0) + "px";
@@ -1337,6 +1518,12 @@ function mapInfo() {
     legend: list.map(a => ({ color: a.color, text: `${a.name}　约 ${fmtAreaShort(a.areaM2)}` })) };
   const a = list[0] || { name: displayName(cur), areaM2: 0, rings: [] };
   return { title: a.name, line: `面积约 ${fmtAreaShort(a.areaM2)} · ${a.rings.flat().length} 个拐点`, small };
+}
+/** 名字跟已经放下的名字靠得太近，就往下挪一行 */
+function placeLabel(c, placed, step) {
+  let [x, y] = c;
+  for (let k = 0; k < 8 && placed.some(([px, py]) => Math.abs(px - x) < step * 6 && Math.abs(py - y) < step); k++) y += step;
+  placed.push([x, y]); return [x, y];
 }
 /** 矿区名字标在哪：多边形的面积重心（凹形时退回到拐点平均位置） */
 function labelPoint(r, sx, sy) {
@@ -1412,6 +1599,23 @@ async function renderMapImage() {
       });
     }
   });
+  // 两期对比：缩掉 / 新增的斜线
+  const cr = cmpResult();
+  if (cr) {
+    const hatchPat = (bg, fg) => { const t = document.createElement("canvas"); t.width = t.height = 10 * S; const c = t.getContext("2d"); c.fillStyle = bg; c.fillRect(0, 0, t.width, t.height); c.strokeStyle = fg; c.lineWidth = 2.4 * S; c.beginPath(); for (let k = -t.width; k < t.width * 2; k += 5 * S) { c.moveTo(k, t.height); c.lineTo(k + t.height, 0); } c.stroke(); return g.createPattern(t, "repeat"); };
+    const pathOf = (c, rings) => { c.beginPath(); rings.forEach(r => { r.forEach((p, i) => i ? c.lineTo(sx(p), sy(p)) : c.moveTo(sx(p), sy(p))); c.closePath(); }); };
+    [[cr.o.rings, cr.n.rings, hatchPat("rgba(30,30,30,.35)", "#fff")], [cr.n.rings, cr.o.rings, hatchPat("rgba(46,158,67,.3)", "#7bd64a")]].forEach(([a, b, pat]) => {
+      const t = document.createElement("canvas"); t.width = W; t.height = H; const c = t.getContext("2d");
+      pathOf(c, a); c.fillStyle = pat; c.fill(); c.globalCompositeOperation = "destination-out"; c.fillStyle = "#000"; pathOf(c, b); c.fill();   // 挖掉要用不透明的笔，否则只挖掉一部分
+      g.drawImage(t, 0, 0);
+    });
+  }
+  // 自己的位置
+  if (geo.pos) {
+    const mpp = 40075016.686 * Math.cos(geo.pos.lat * D2R) / (TILE * Math.pow(2, map.z));
+    g.beginPath(); g.arc(sx(geo.pos), sy(geo.pos), Math.max(6, geo.pos.acc / mpp) * S, 0, Math.PI * 2); g.fillStyle = "rgba(26,115,232,.15)"; g.fill();
+    g.beginPath(); g.arc(sx(geo.pos), sy(geo.pos), 6 * S, 0, Math.PI * 2); g.fillStyle = "#1a73e8"; g.fill(); g.strokeStyle = "#fff"; g.lineWidth = 2.5 * S; g.stroke();
+  }
   // 周边地点
   g.font = `${11 * S}px ${FONT}`;
   nbMarkers().forEach(m => {
@@ -1420,15 +1624,16 @@ async function renderMapImage() {
   });
   if (multi) {   // 矿区名字
     g.font = `700 ${13 * S}px ${FONT}`; g.textAlign = "center";
-    list.forEach(a => { const c = labelPoint(a.rings[0], sx, sy); g.lineWidth = 3.5 * S; g.strokeStyle = "#000"; g.strokeText(a.name, c[0], c[1]); g.fillStyle = a.color; g.fillText(a.name, c[0], c[1]); });
+    const placed = [];
+    list.forEach(a => { const c = placeLabel(labelPoint(a.rings[0], sx, sy), placed, 18 * S); g.lineWidth = 3.5 * S; g.strokeStyle = "#000"; g.strokeText(a.name, c[0], c[1]); g.fillStyle = a.color; g.fillText(a.name, c[0], c[1]); });
     g.textAlign = "left";
   }
   // 说明牌（多个矿区时是图例）
   const info = mapInfo(), pad = 9 * S;
   const f1 = `700 ${14 * S}px ${FONT}`, f2 = `${12 * S}px ${FONT}`, f3 = `${11 * S}px ${FONT}`;
-  const rows = info.legend ? info.legend : [{ text: info.line }];
+  const rows = (info.legend ? info.legend : [{ text: info.line }]).concat(cr ? [{ hatch: "cut", text: "缩掉 约 " + fmtAreaShort(cr.cut) }, { hatch: "add", text: "新增 约 " + fmtAreaShort(cr.add) }] : []);
   g.font = f1; let bw = g.measureText(info.title).width;
-  g.font = f2; rows.forEach(r => bw = Math.max(bw, g.measureText(r.text).width + (r.color ? 16 * S : 0)));
+  g.font = f2; rows.forEach(r => bw = Math.max(bw, g.measureText(r.text).width + (r.color || r.hatch ? 16 * S : 0)));
   g.font = f3; bw = Math.max(bw, g.measureText(info.small).width);
   bw = Math.min(bw + pad * 2, W - 16 * S); const bh = (44 + rows.length * 18) * S;
   rrect(g, 8 * S, 8 * S, bw, bh, 8 * S); g.fillStyle = "rgba(255,255,255,.93)"; g.fill();
@@ -1437,6 +1642,12 @@ async function renderMapImage() {
   rows.forEach((r, i) => {
     const y = 8 * S + (38 + i * 18) * S; let x = 8 * S + pad;
     if (r.color) { g.fillStyle = r.color; g.fillRect(x, y - 9 * S, 10 * S, 10 * S); x += 16 * S; }
+    else if (r.hatch) {
+      g.fillStyle = r.hatch === "cut" ? "#fff" : "#e9f7ec"; g.fillRect(x, y - 9 * S, 10 * S, 10 * S);
+      g.save(); g.beginPath(); g.rect(x, y - 9 * S, 10 * S, 10 * S); g.clip(); g.strokeStyle = r.hatch === "cut" ? "#555" : "#2e9e43"; g.lineWidth = 2 * S;
+      for (let k = -10; k < 20; k += 4) { g.beginPath(); g.moveTo(x + k * S, y + 1 * S); g.lineTo(x + (k + 10) * S, y - 9 * S); g.stroke(); }
+      g.restore(); x += 16 * S;
+    }
     g.fillStyle = "#1f2a33"; g.fillText(r.text, x, y, bw - (x - 8 * S) - pad);
   });
   g.fillStyle = "#5d6b74"; g.font = f3; g.fillText(info.small, 8 * S + pad, 8 * S + bh - 8 * S, bw - pad * 2);
@@ -1454,7 +1665,7 @@ async function renderMapImage() {
   return { cv, missing: jobs.length - tiles.length };
 }
 let pngCache = null;   // 分享要在点击后很快发起，所以第一次画好先存着，第二次点直接用
-function pngKey() { return [map.z, map.cx.toFixed(0), map.cy.toFixed(0), map.w, map.h, $("basemap").value, cur, nbRadius, nbMarkers().length, ...allAreas().map(a => a.name + a.areaM2)].join("|"); }
+function pngKey() { return [map.z, map.cx.toFixed(0), map.cy.toFixed(0), map.w, map.h, $("basemap").value, cur, nbRadius, nbMarkers().length, cmp.on, cmp.old, cmp.neu, geo.pos ? geo.pos.lon.toFixed(6) + geo.pos.lat.toFixed(6) : "", ...allAreas().map(a => a.name + a.areaM2)].join("|"); }
 async function getPng() {
   if (pngCache && pngCache.key === pngKey()) return pngCache;
   $("pngNote").textContent = "正在生成图片……";
