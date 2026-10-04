@@ -693,7 +693,7 @@ const state = { kind: null, rows: [], computed: null, rings: [] };   // 当前�
 // 矿区清单：可以放好几个矿区，同时画在一张图上。只放在这个网页里，不保存、不上传
 const COLORS = ["#e2453a", "#f2c230", "#2fc4e0", "#e357d0", "#7bd64a", "#ff8a3d", "#ffffff"];
 const areas = [];
-let cur = 0;
+let cur = 0, srcTimer = null;
 function blankArea() {
   return { name: "", nameTouched: false, src: "", area: "", areaTouched: false, unit: "km2", datum: "cgcs2000", cm: "",
            kind: null, rows: [], expected: null, parseNotes: [], rings: [], areaM2: 0, nearby: null };
@@ -705,6 +705,7 @@ function displayName(i) {
 }
 /** 把页面上正在编辑的内容存回清单 */
 function saveCur() {
+  if (srcTimer) { clearTimeout(srcTimer); srcTimer = null; onSourceChange(); }   // 刚粘的坐标还没读，先读掉，免得切走就丢
   const a = areas[cur];
   Object.assign(a, { name: $("name").value, nameTouched: !!$("name").dataset.touched, src: $("src").value,
     area: $("area").value, areaTouched: !!$("area").dataset.touched, unit: $("areaUnit").value, datum: $("datum").value, cm: $("cm").value,
@@ -718,15 +719,23 @@ function loadArea(i) {
   a.areaTouched ? ($("area").dataset.touched = "1") : delete $("area").dataset.touched;
   Object.assign(state, { kind: a.kind, rows: a.rows, expected: a.expected, parseNotes: a.parseNotes, rings: a.rings, areaM2: a.areaM2, computed: null });
   $("ocrBox").style.display = "none";
+  if (a.src.trim() && !a.rows.length) { onSourceChange(); renderNearby(); return; }   // 框里有文字却没读出坐标：重新读
   renderTable(); recompute(true); renderNearby();
 }
 function renderTabs() {
   const box = $("areaTabs");
-  box.innerHTML = areas.map((a, i) => {
+  const html = areas.map((a, i) => {
     const has = (i === cur ? state.rings : a.rings).length > 0;
     return `<button class="${i === cur ? "on" : ""}" data-area="${i}"><i style="background:${colorOf(i)}"></i>${xmlEsc(displayName(i))}${has ? "" : " <em>（还没坐标）</em>"}</button>`;
   }).join("") + `<button class="add" id="areaAdd">＋ 再加一个矿区</button>` + (areas.length > 1 ? `<button class="del" id="areaDel">删除当前这个</button>` : "");
+  if (box.innerHTML !== html) box.innerHTML = html;   // 没变就不重画
 }
+let tabDown = null;
+$("areaTabs").addEventListener("pointerdown", e => { const b = e.target.closest("button"); tabDown = b && b.dataset.area != null ? b : null; });
+$("areaTabs").addEventListener("pointerup", e => {   // 切换矿区在手指抬起时就做，不等 click（键盘收起、页面跳动时 click 常常丢）
+  const b = e.target.closest("button");
+  if (b && b === tabDown && b.dataset.area != null) { e.preventDefault(); const i = +b.dataset.area; tabDown = null; if (i !== cur) { saveCur(); loadArea(i); } }
+});
 $("areaTabs").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
   if (b.id === "areaAdd") { saveCur(); areas.push(blankArea()); loadArea(areas.length - 1); $("src").focus(); return; }
@@ -921,8 +930,7 @@ function recompute(fit) {
 ["datum", "cm", "areaUnit"].forEach(id => $(id).addEventListener("input", () => recompute(true)));
 $("area").addEventListener("input", () => { $("area").dataset.touched = "1"; recompute(false); });
 $("name").addEventListener("input", () => { $("name").dataset.touched = "1"; renderTabs(); nbSync(); if (allAreas().length) drawMap(false); });
-let srcTimer;
-$("src").addEventListener("input", () => { clearTimeout(srcTimer); srcTimer = setTimeout(onSourceChange, 250); });
+$("src").addEventListener("input", () => { clearTimeout(srcTimer); srcTimer = setTimeout(() => { srcTimer = null; onSourceChange(); }, 250); });
 $("btnExample").onclick = () => { $("src").value = EXAMPLE; delete $("area").dataset.touched; delete $("name").dataset.touched; onSourceChange(); };
 $("btnClear").onclick = () => { $("src").value = ""; $("area").value = ""; $("name").value = ""; delete $("area").dataset.touched; delete $("name").dataset.touched; onSourceChange(); };
 
@@ -973,6 +981,7 @@ function cleanOcr(t) { return (t || "").replace(/(\S) (?=\S)/g, (m, c) => /[\u4e
 async function ocrFile(file) {
   if (!file || !/^image\//.test(file.type) || ocrBusy) return;
   ocrBusy = true;
+  const startArea = areas[cur];   // 认字要几秒，期间可能切到别的矿区
   const url = URL.createObjectURL(file);
   ocrShow(url, "正在读图片……", 0.02);
   try {
@@ -985,6 +994,11 @@ async function ocrFile(file) {
       const text = cleanOcr((await worker.recognize(await prepImage(file, mode))).data.text);
       const sc = Object.assign(scoreText(text), { text });
       if (!best || sc.score > best.score) best = sc;
+    }
+    if (areas[cur] !== startArea) {   // 已经切到别的矿区了：结果放回原来那个，切回去时自动读
+      Object.assign(startArea, { src: best.text, rows: [], kind: null, rings: [], areaM2: 0, nameTouched: false, areaTouched: false });
+      ocrShow(null, `认完了。结果放回了开始认字的那个矿区，切回去就能看到。`, 1); renderTabs();
+      return;
     }
     $("src").value = best.text;
     delete $("area").dataset.touched; delete $("name").dataset.touched;
@@ -1257,6 +1271,9 @@ function nbVisible() {
   return r.items.filter(x => x.dist <= nbRadius);
 }
 function nbTips(r, inside, near) {
+  return nbTipsAll(r, inside, near).filter(t => typeof t !== "string");   // 江律师要求：只留两条绿色的通用提醒
+}
+function nbTipsAll(r, inside, near) {
   const tips = [], byCat = (list, k) => list.filter(x => x.cat === k), names = l => l.slice(0, 6).map(x => x.name).join("、") + (l.length > 6 ? ` 等 ${l.length} 处` : "");
   const all = inside.concat(near), R = radiusLabel();
   const vIn = byCat(inside, "village"), vNear = byCat(near, "village");
@@ -1287,13 +1304,12 @@ function renderNearby() {
   if (!r) { box.innerHTML = ""; if (!nbBusy) $("nbNote").textContent = ""; return; }
   if (nbStale()) { box.innerHTML = ""; nbSync(); return; }
   const vis = nbVisible(), inside = vis.filter(x => x.dist === 0), near = vis.filter(x => x.dist > 0);
-  const L = r.loc, place = nbPlace(L), county = L && (L.county || L.city) || "当地";
+  const L = r.loc, place = nbPlace(L);
   const group = list => NB_CATS.map(c => ({ c, l: list.filter(x => x.cat === c.key) })).filter(g => g.l.length);
   const ul = (list, withDist) => list.length ? `<ul>${group(list).map(g => `<li><i></i><b>${g.c.label}</b>：${g.l.map(x => xmlEsc(x.name) + (withDist ? `（${fmtDist(x.dist)}）` : "")).join("、")}</li>`).join("")}</ul>` : `<div class="none">没查到有名字的地点</div>`;
   const tips = nbTips(r, inside, near);
   box.innerHTML =
-    `<div class="loc"><b>所在地</b>：${xmlEsc(place || "没查到")}${L && L.road ? `；最近的路：${xmlEsc(L.road)}（${fmtDist(+L.road_distance || 0)}）` : ""}<br>` +
-    `<b>该找哪些部门</b>：查生态保护红线、永久基本农田、压覆矿产，找${xmlEsc(county)}的自然资源部门；查自然保护地、林地、公益林、草原，找${xmlEsc(county)}的林草部门；查河湖管理范围，找${xmlEsc(county)}的水利部门。</div>` +
+    `<div class="loc"><b>所在地</b>：${xmlEsc(place || "没查到")}${L && L.road ? `；最近的路：${xmlEsc(L.road)}（${fmtDist(+L.road_distance || 0)}）` : ""}</div>` +
     `<h4>范围里</h4>${ul(inside, false)}<h4>周边 ${radiusLabel()}以内</h4>${ul(near, true)}` +
     `<h4>提醒要点</h4><ul class="tips">${tips.map(t => typeof t === "string" ? `<li>${xmlEsc(t)}</li>` : `<li class="ok">${xmlEsc(t.t)}</li>`).join("")}</ul>` +
     `<p class="hint">查询时间：${r.at.toLocaleString("zh-CN", { hour12: false })}。数据来自天地图地名库。</p>`;
@@ -1359,12 +1375,36 @@ function setExport(on) {
   const n = allAreas().length;
   $("exportNote").textContent = on ? `文件名：${kmlName()}.kml` + (n > 1 ? `（${n} 个矿区都在里面，奥维里每个矿区一个文件夹）` : "") : "核对完坐标后可以导出";
 }
-$("btnKml").onclick = () => {
-  const blob = new Blob([currentKml()], { type: "application/vnd.google-earth.kml+xml" });
+/**
+ * 把网页生成的文件存到手机或电脑上。
+ * 有的手机浏览器（华为自带浏览器等）存不了网页里直接生成的文件（blob 链接），所以优先走 sw.js：
+ * 先把文件放进浏览器缓存，再打开一个本网站的普通网址，由 sw.js 以「附件下载」的方式交出去，浏览器就当成普通文件下载了。
+ * 文件只在这台手机的浏览器里中转，不上传；两分钟后自动删掉
+ */
+async function saveFile(blob, name) {
+  const ext = (name.match(/\.\w+$/) || [""])[0];
+  if (navigator.serviceWorker && navigator.serviceWorker.controller && "caches" in window) {
+    try {
+      const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+      const url = new URL(`__dl/${id}/${encodeURIComponent(name)}`, location.href).href;
+      const c = await caches.open("dl");
+      await c.put(url, new Response(blob, { headers: { "Content-Type": "application/octet-stream",
+        "Content-Disposition": `attachment; filename="file${ext}"; filename*=UTF-8''${encodeURIComponent(name)}` } }));
+      const a = document.createElement("a"); a.href = url; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => c.delete(url), 120000);
+      return "sw";
+    } catch (e) { /* 走下面的老办法 */ }
+  }
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob); a.download = kmlName() + ".kml";
+  a.href = URL.createObjectURL(blob); a.download = name;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  return "blob";
+}
+if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
+$("btnKml").onclick = async () => {
+  await saveFile(new Blob([currentKml()], { type: "application/vnd.google-earth.kml+xml" }), kmlName() + ".kml");
+  $("exportNote").textContent = `已经开始下载 ${kmlName()}.kml。手机上在通知栏或「文件管理 → 下载」里找到它，点开选奥维，再点「导入」。没反应的话，请确认不是在微信里打开的。`;
 };
 function kmlFile() { return new File([currentKml()], kmlName() + ".kml", { type: "application/vnd.google-earth.kml+xml" }); }
 // 「分享」按钮：只在浏览器说能分享文件时才显示（微信里不显示）。
@@ -1678,8 +1718,7 @@ function pngName() { return kmlName() + "-卫星图.png"; }
 $("btnPng").onclick = async () => {
   try {
     const { blob, missing } = await getPng();
-    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = pngName();
-    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    await saveFile(blob, pngName());
     $("pngNote").textContent = `已保存：${pngName()}` + (missing ? `（有 ${missing} 块卫星图没加载出来，可以稍等再存一次）` : "") + "。手机上在「文件管理 → 下载」里，也可以直接截屏。";
   } catch (e) { $("pngNote").textContent = "图片没生成出来（" + (e.message || e) + "），可以直接截屏。"; }
 };
@@ -1735,6 +1774,7 @@ window.addEventListener("resize", () => drawMap(false));
 
 areas.push(blankArea());
 renderTabs();
+window.addEventListener("beforeunload", e => { if (allAreas().length) { e.preventDefault(); e.returnValue = ""; } });
 setExport(false);
 </script>
 </body>
