@@ -137,7 +137,7 @@ body.mapfull { overflow: hidden; }
 #nbOut h4 { font-size: 14px; margin: 14px 0 6px; }
 #nbOut ul { margin: 0; padding-left: 0; list-style: none; display: grid; gap: 5px; font-size: 14px; }
 #nbOut li { line-height: 1.55; }
-#nbOut li i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; box-shadow: 0 0 0 1px rgba(0,0,0,.25); vertical-align: 1px; }
+#nbOut li i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 7px; background: var(--sub); vertical-align: 2px; }   /* 统一一种颜色，免得让人以为颜色代表轻重 */
 #nbOut .loc { background: var(--field); border-radius: 9px; padding: 9px 11px; font-size: 14px; line-height: 1.6; }
 #nbOut .tips li { background: var(--warn-bg); color: var(--warn); border-radius: 9px; padding: 8px 11px; }
 #nbOut .tips li.ok { background: var(--ok-bg); color: var(--ok); }
@@ -1128,7 +1128,7 @@ function renderNearby() {
   const vis = nbVisible(), inside = vis.filter(x => x.dist === 0), near = vis.filter(x => x.dist > 0);
   const L = r.loc, place = nbPlace(L), county = L && (L.county || L.city) || "当地";
   const group = list => NB_CATS.map(c => ({ c, l: list.filter(x => x.cat === c.key) })).filter(g => g.l.length);
-  const ul = (list, withDist) => list.length ? `<ul>${group(list).map(g => `<li><i style="background:${g.c.color}"></i><b>${g.c.label}</b>：${g.l.map(x => xmlEsc(x.name) + (withDist ? `（${fmtDist(x.dist)}）` : "")).join("、")}</li>`).join("")}</ul>` : `<div class="none">没查到有名字的地点</div>`;
+  const ul = (list, withDist) => list.length ? `<ul>${group(list).map(g => `<li><i></i><b>${g.c.label}</b>：${g.l.map(x => xmlEsc(x.name) + (withDist ? `（${fmtDist(x.dist)}）` : "")).join("、")}</li>`).join("")}</ul>` : `<div class="none">没查到有名字的地点</div>`;
   const tips = nbTips(r, inside, near);
   box.innerHTML =
     `<div class="loc"><b>所在地</b>：${xmlEsc(place || "没查到")}${L && L.road ? `；最近的路：${xmlEsc(L.road)}（${fmtDist(+L.road_distance || 0)}）` : ""}<br>` +
@@ -1169,7 +1169,7 @@ $("btnNbCopy").onclick = async () => {
 };
 /** 地图上要标出来的周边地点（当前矿区、当前半径、勾选了才标） */
 function nbMarkers() { return $("nbOnMap").checked ? nbVisible() : []; }
-const NB_COLOR = Object.fromEntries(NB_CATS.map(c => [c.key, c.color]));
+const NB_COLOR = Object.fromEntries(NB_CATS.map(c => [c.key, "#ffffff"]));   // 地图上也统一白点，不用颜色分轻重
 
 // ── 导出 ──
 function kmlName() {
